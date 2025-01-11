@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task For KVan</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 50px auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      text-align: center;
+      color: #5a67d8;
+    }
+
+    form {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: #5a67d8;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #434190;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    li {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px;
+      background: #f9f9f9;
+      margin-bottom: 5px;
+      border-radius: 4px;
+    }
+
+    li.completed {
+      text-decoration: line-through;
+      background: #d4edda;
+    }
+
+    .progress {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    progress {
+      width: 100%;
+      height: 20px;
+    }
+
+    .reset-button {
+      margin-top: 10px;
+      background-color: #e53e3e;
+      border-color: #e53e3e;
+    }
+
+    .congrats-message {
+      font-size: 18px;
+      color: green;
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    /* Media Queries for responsiveness */
+    @media (max-width: 768px) {
+      .container {
+        margin: 20px;
+        padding: 15px;
+      }
+
+      h1 {
+        font-size: 1.5em;
+      }
+
+      input, button {
+        font-size: 1em;
+      }
+
+      button {
+        padding: 8px 16px;
+      }
+
+      ul {
+        padding: 0;
+      }
+
+      li {
+        padding: 8px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 1.2em;
+      }
+
+      input, button {
+        font-size: 0.9em;
+      }
+
+      button {
+        padding: 6px 12px;
+      }
+
+      .progress {
+        font-size: 0.9em;
+      }
+
+      .reset-button {
+        width: 100%;
+        padding: 10px;
+      }
+
+      .congrats-message {
+        font-size: 16px;
+      }
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Task For KVan</h1>
+    <form id="task-form">
+      <input type="text" id="task-input" placeholder="Enter your task..." required>
+      <button type="submit">Add Task</button>
+    </form>
+    <ul id="task-list"></ul>
+    <div class="progress">
+      <p>Completion: <span id="completion-percent">0%</span></p>
+      <progress id="progress-bar" value="0" max="100"></progress>
+    </div>
+    <div>
+      <p>Tasks Completed 100%: <span id="completion-count">0</span></p>
+    </div>
+    <button class="reset-button" onclick="resetCompletionCount()">Reset Task Complete</button>
+    <div id="congrats-message" class="congrats-message" style="display: none;"></div>
+  </div>
+  <script>
+    let db;
+    let completionCount = 0; // Biến đếm số lần hoàn thành 100%
+
+    // Đọc số lần hoàn thành từ localStorage khi tải lại trang
+    const loadCompletionCount = () => {
+      const storedCompletionCount = localStorage.getItem('completionCount');
+      if (storedCompletionCount !== null) {
+        completionCount = parseInt(storedCompletionCount);
+        document.getElementById("completion-count").textContent = completionCount;
+      }
+    };
+
+    // Lưu số lần hoàn thành vào localStorage
+    const saveCompletionCount = () => {
+      localStorage.setItem('completionCount', completionCount);
+    };
+
+    // Mở hoặc tạo cơ sở dữ liệu IndexedDB
+    const openDB = () => {
+      const request = indexedDB.open("taskForKVanDB", 1);
+
+      request.onerror = (event) => {
+        console.error("Database error:", event.target.error);
+      };
+
+      request.onsuccess = (event) => {
+        db = event.target.result;
+        loadTasks(); // Lấy nhiệm vụ khi cơ sở dữ liệu mở thành công
+      };
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        const objectStore = db.createObjectStore("tasks", { keyPath: "id", autoIncrement: true });
+        objectStore.createIndex("completed", "completed", { unique: false });
+      };
+    };
+
+    // Thêm nhiệm vụ vào cơ sở dữ liệu
+    const addTaskToDB = (task) => {
+      const transaction = db.transaction(["tasks"], "readwrite");
+      const objectStore = transaction.objectStore("tasks");
+      const request = objectStore.add(task);
+      request.onsuccess = () => {
+        loadTasks();
+      };
+    };
+
+    // Lấy tất cả nhiệm vụ từ cơ sở dữ liệu
+    const loadTasks = () => {
+      const transaction = db.transaction(["tasks"], "readonly");
+      const objectStore = transaction.objectStore("tasks");
+      const request = objectStore.getAll();
+
+      request.onsuccess = () => {
+        const tasks = request.result;
+        updateUI(tasks);
+      };
+    };
+
+    // Cập nhật giao diện người dùng
+    const updateUI = (tasks) => {
+      const taskList = document.getElementById("task-list");
+      taskList.innerHTML = tasks
+        .map(
+          (task) =>
+            `<li data-id="${task.id}" class="${task.completed ? "completed" : ""}">
+              <span onclick="toggleCompletion(${task.id})">${task.text}</span>
+              <button onclick="deleteTask(${task.id})">Delete</button>
+            </li>`
+        )
+        .join("");
+
+      const completedTasks = tasks.filter((task) => task.completed).length;
+      const percent = tasks.length ? Math.round((completedTasks / tasks.length) * 100) : 0;
+      document.getElementById("completion-percent").textContent = `${percent}%`;
+      document.getElementById("progress-bar").value = percent;
+
+      // Kiểm tra nếu tất cả nhiệm vụ đã hoàn thành
+      if (completedTasks === tasks.length && tasks.length > 0) {
+        // Nếu tiến độ hoàn thành 100%, đợi 1 giây rồi bỏ gạch tất cả nhiệm vụ
+        setTimeout(() => {
+          removeAllStrikethrough(tasks);
+          incrementCompletionCount();
+        }, 1000);
+      }
+    };
+
+    // Xóa nhiệm vụ từ cơ sở dữ liệu
+    const deleteTask = (id) => {
+      const transaction = db.transaction(["tasks"], "readwrite");
+      const objectStore = transaction.objectStore("tasks");
+      objectStore.delete(id);
+      transaction.oncomplete = () => {
+        loadTasks();
+      };
+    };
+
+    // Đánh dấu hoặc bỏ đánh dấu nhiệm vụ khi nhấp vào tên nhiệm vụ
+    const toggleCompletion = (id) => {
+      const transaction = db.transaction(["tasks"], "readwrite");
+      const objectStore = transaction.objectStore("tasks");
+      const request = objectStore.get(id);
+
+      request.onsuccess = () => {
+        const task = request.result;
+        task.completed = !task.completed;
+        objectStore.put(task);
+        loadTasks();
+      };
+    };
+
+    // Remove gạch chéo cho tất cả nhiệm vụ khi tiến độ đạt 100%
+    const removeAllStrikethrough = (tasks) => {
+      tasks.forEach((task) => {
+        if (task.completed) {
+          task.completed = false;
+          const transaction = db.transaction(["tasks"], "readwrite");
+          const objectStore = transaction.objectStore("tasks");
+          objectStore.put(task);
+        }
+      });
+      loadTasks(); // Tải lại tất cả nhiệm vụ
+    };
+
+    // Tăng biến đếm số lần hoàn thành 100%
+    const incrementCompletionCount = () => {
+      completionCount++;
+      document.getElementById("completion-count").textContent = completionCount;
+      saveCompletionCount(); // Lưu lại vào localStorage
+
+      // Hiển thị thông báo về rank theo số lần hoàn thành
+      let rankMessage = '';
+      if (completionCount >= 200) {
+        rankMessage = 'Bạn đã đạt Rank Thách Đấu';
+      } else if (completionCount >= 100) {
+        rankMessage = 'Bạn đã đạt Rank Chiến Thần';
+      } else if (completionCount >= 50) {
+        rankMessage = 'Bạn đã đạt Rank Chiến Tướng';
+      } else if (completionCount >= 40) {
+        rankMessage = 'Bạn đã đạt Rank Cao Thủ';
+      } else if (completionCount >= 30) {
+        rankMessage = 'Bạn đã đạt Rank Tinh Anh';
+      } else if (completionCount >= 20) {
+        rankMessage = 'Bạn đã đạt Rank Kim Cương';
+      } else if (completionCount >= 15) {
+        rankMessage = 'Bạn đã đạt Rank Bạch Kim';
+      } else if (completionCount >= 10) {
+        rankMessage = 'Bạn đã đạt Rank Vàng';
+      } else if (completionCount >= 5) {
+        rankMessage = 'Bạn đã đạt Rank Đồng';
+      }
+
+      if (rankMessage) {
+        document.getElementById("congrats-message").style.display = "block";
+        document.getElementById("congrats-message").textContent = rankMessage;
+      }
+    };
+
+    // Xử lý thêm nhiệm vụ
+    document.getElementById("task-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const taskText = document.getElementById("task-input").value.trim();
+
+      if (taskText) {
+        addTaskToDB({ text: taskText, completed: false });
+        document.getElementById("task-input").value = "";
+      }
+    });
+
+    // Thêm logic cho nút Reset Task Complete
+    const resetCompletionCount = () => {
+      completionCount = 0;
+      document.getElementById("completion-count").textContent = completionCount;
+      saveCompletionCount(); // Lưu lại số lần hoàn thành mới (là 0)
+      document.getElementById("congrats-message").style.display = "none"; // Ẩn thông báo
+    };
+
+    // Khởi tạo IndexedDB khi trang tải
+    openDB();
+
+    // Tải số lần hoàn thành từ localStorage
+    loadCompletionCount();
+  </script>
+</body>
+</html>
